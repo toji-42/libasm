@@ -1,0 +1,89 @@
+======================================================================
+                  BIBLE DU PROJET LIBASM - ECOLE 42 (v3.0)
+======================================================================
+
+I. LES BASES DU LANGAGE (POUR LES NÉOPHYTES)
+--------------------------------------------
+L'assembleur, c'est déplacer des briques (données) entre des boîtes (registres) 
+et la mémoire (RAM).
+
+- mov  dest, src : Copie src dans dest.
+- add/sub/inc/dec : Opérations mathématiques.
+- jmp / je / jne : "Aller à" (Jump). Équivalent des if/else et boucles.
+- labels (ex: .loop:) : Repères pour les sauts. Toujours mettre un ":" !
+- [] (Crochets) : Signifie "L'adresse de". 
+     * rdi = une adresse (ex: 0x42)
+     * [rdi] = le contenu stocké à l'adresse 0x42 (le vrai caractère).
+
+II. LA CARTE DES REGISTRES (TES OUTILS)
+---------------------------------------
+Imagine les registres comme des variables globales ultra-rapides de 64 bits.
+
+1. LES ARGUMENTS (Entrée de ta fonction) :
+   - 1er : RDI | 2e : RSI | 3e : RDX | 4e : RCX | 5e : R8 | 6e : R9
+   *Si ta fonction reçoit un 'char *', l'adresse du premier caractère est dans RDI.*
+
+2. LA VALEUR DE RETOUR (Sortie) :
+   - RAX : C'est la boîte où le C attend de trouver ton résultat.
+
+3. LES TAILLES (Très important !) :
+   Chaque registre a des "sous-boîtes" pour les petits types (char, int) :
+   - 64 bits (Pointeur / size_t) : RAX, RDI, RSI...
+   - 32 bits (int) : EAX, EDI, ESI...
+   -  8 bits (char) : AL, DIL, SIL, DL, R8B...
+   *Note : On utilise 'movzx' pour mettre un petit 8 bits dans un gros 64 bits sans saleté.*
+
+III. LES SYSCALLS (PARLER AU SYSTÈME)
+-------------------------------------
+Pour 'ft_write' et 'ft_read', tu ne fais pas le travail, tu demandes au Kernel.
+
+1. Identifiant : 1 pour WRITE, 0 pour READ (sur Linux).
+2. Préparation :
+   - mov rax, 1      ; Je veux écrire
+   - syscall         ; "Monsieur le Kernel, faites-le s'il vous plaît"
+3. Résultat : Le Kernel remplace le contenu de RAX par le nombre de bytes écrits 
+   OU par un nombre négatif si ça a planté.
+
+IV. LE CAUCHEMAR D'ERRNO (DÉTAILLÉ PAS À PAS)
+---------------------------------------------
+Pourquoi c'est dur ? Parce que 'errno' n'est pas une simple variable, c'est une 
+fonction qui renvoie une adresse.
+
+SI LE SYSCALL RENVOIE UN NÉGATIF DANS RAX :
+1. Sauvegarder l'erreur : mov r12, rax (Prends un registre "Sacré" pour le call).
+2. Négativiser : neg r12 (ex: -9 devient 9).
+3. ALIGNER LA PILE : sub rsp, 8 (Indispensable avant 'call', sinon Segfault).
+4. Appeler l'adresse d'errno : call __errno_location WRT ..plt
+5. RAX contient maintenant une ADRESSE (ex: 0x100).
+6. Stocker l'erreur : mov [rax], r12 (On met 9 dans la case 0x100).
+7. Nettoyer la pile : add rsp, 8
+8. Renvoyer l'erreur officielle : mov rax, -1
+9. ret
+
+V. L'ALIGNEMENT DE LA PILE (LA RÈGLE DES 16 OCTETS)
+---------------------------------------------------
+C'est la cause n°1 de Segfault à 42.
+- Le CPU exige que la pile (RSP) soit alignée sur 16 octets avant chaque 'call'.
+- Quand tu entres dans TA fonction, le 'call' du main a déjà poussé 8 octets.
+- Ta pile est donc à "8". Elle est désalignée.
+- ASTUCE : Si tu fais un 'call' dans ton code, fais un 'sub rsp, 8' au début 
+  et un 'add rsp, 8' à la fin. Si tu ne fais pas de 'call', ne touche à rien.
+
+VI. TRUCS ET ASTUCES VIM & SHELL
+--------------------------------
+1. COMPILER TOUT :
+   for f in *.s; do nasm -f elf64 $f; done && ar rcs libasm.a *.o
+
+2. TESTER :
+   gcc main.c libasm.a -o test && ./test
+
+3. VIM (Netrw) :
+   - :Vex (Split vertical)
+   - i (changer d'affichage)
+   - a (cacher/montrer les fichiers ignorés)
+
+4. DÉBOGUER (GDB) :
+   - layout asm : Voir le code en direct.
+   - info registers : Voir le contenu de TOUTES tes boîtes.
+   - stepi : Avancer d'UNE SEULE brique de code.
+======================================================================
