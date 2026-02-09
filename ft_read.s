@@ -8,7 +8,7 @@ ft_read:
     mov rax, 2
     syscall
     cmp rax, 0
-    jbe .error ; <= 
+    jbe .error 
     ret
 
 .error:
